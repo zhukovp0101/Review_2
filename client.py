@@ -1,7 +1,8 @@
 import argparse
 import requests
-import datetime
 import shlex
+import json
+from collections import defaultdict
 from sys import stderr
 from game import Game
 from question import Question
@@ -49,7 +50,7 @@ class Client:
             except requests.RequestException:
                 print("Enter valid server address (\"exit\" to exit)")
                 address = input()
-        self._address = address.rstrip("/")
+        self._address = address.rstrip("/ ")
         return True
 
     # Активирует клиент.
@@ -97,8 +98,9 @@ class Client:
     def _get_user_command(self):
         print(self._command_line, end="")
         command_args = shlex.split(input())
-        self._connect(self._address)
-        self._handle_command(command_args)
+        if (len(command_args) > 0):
+            self._connect(self._address)
+            self._handle_command(command_args)
 
     # Обработка команды пользователя.
     def _handle_command(self, command_args):
@@ -122,7 +124,11 @@ class Client:
     @staticmethod
     def _print_response(dict_response):
         try:
-            print(dict_response["text"])
+            if (dict_response["status"] == "OK"):
+                print(dict_response["text"])
+            else:
+                print(dict_response["text"])
+                print("reason: {}".format(dict_response["reason"]))
         except KeyError:
             print("Unknown response.")
 
@@ -142,6 +148,16 @@ class Client:
         response = package.save(dict_args, address)
         return response
 
+    # Добавление вопросов и ответов из файла в формате JSON.
+    def _load_data(self, dict_args, address):
+        filename = dict_args["file"]
+        with open(filename) as file:
+            dict_data = defaultdict(list, json.load(file))
+            package = Package()
+            for package in dict_data["packages"]:
+
+
+
     # Создание игры.
     def _create_game(self, dict_args=None, address=None):
         self._game_mode = True
@@ -159,7 +175,7 @@ class Client:
         args = {}
         while True:
             try:
-                print("Save the game? (y/n, default = y): ", end="")
+                print("Save the game?")
                 answer = input()
                 args = self._parsers["service_parser"].parse_args(["--bool_answer", answer])
                 break
@@ -169,10 +185,9 @@ class Client:
             response = Game.save(game, dict_args, address)
             return response
         else:
-            return {"text": "Game wasn't saved."}
-        # TODO: определить поведение на сервере для сохранения игры.
+            return {"text": "Game wasn't saved.", "status": "OK"}
 
-    # Установка парсера (нужно для специальных режимов; здесь принимается аргумент self_object, который передается в качетсве параметра self в функции, выполняющие команды, например, add_participant в Game).
+    # Установка парсера (нужно для специальных режимов).
     def _set_current_parser(self, parser, self_object=None):
         self._current_parser = parser
         self._current_parser.object = self_object
@@ -198,26 +213,27 @@ class Client:
 
         default_subparsers = default_parser.add_subparsers(dest='command')
 
-        add_question_parser = default_subparsers.add_parser("add_question",
-                                                                          help="Add question to database")
+        load_data_parser = default_subparsers.add_parser("load_data", help="Adding packages and questions from file")
+        load_data_parser.add_argument("file", type=str, help="json file name")
+        load_data_parser.set_defaults(function=self._load_data)
+
+        add_question_parser = default_subparsers.add_parser("add_question", help="Add question to database")
         add_question_parser.add_argument("--text", "-t", type=str, help="The text of the question", required=True)
         add_question_parser.add_argument("--answer", "-a", type=str, help="The answer to the question", required=True)
         add_question_parser.add_argument("--name", type=str, help="The name of the question")
-        add_question_parser.add_argument("--date", type=datetime.datetime, help="The date of the question")
         add_question_parser.add_argument("--author", type=str, help="The author of the question")
         add_question_parser.add_argument("--complexity", "-c", type=str, help="The complexity of the question")
+        add_question_parser.add_argument("--comment", type=str, help="Comment to the question")
         add_question_parser.set_defaults(function=Question.add_question)
 
-        add_package_parser = default_subparsers.add_parser("add_package",
-                                                                         help="Add package to database")
-        add_package_parser.add_argument("--name", type=str, help="The name of the package")
-        add_package_parser.add_argument("--date", type=datetime.datetime, help="The date of the package")
+        add_package_parser = default_subparsers.add_parser("add_package", help="Add package to database")
+        add_package_parser.add_argument("name", type=str, help="The name of the package")
         add_package_parser.add_argument("--author", type=str, help="The author of the package")
         add_package_parser.add_argument("--complexity", type=str, help="The complexity of the package")
         add_package_parser.set_defaults(function=self._add_package)
 
-        create_game_parser = default_subparsers.add_parser("create_game",
-                                                                         help="Create a new game")
+        create_game_parser = default_subparsers.add_parser("create_game", help="Create a new game")
+        create_game_parser.add_argument("--name", help="The name of the game")
         create_game_parser.set_defaults(function=self._create_game)
 
         return default_parser
@@ -226,35 +242,42 @@ class Client:
         game_parser = NonExitArgumentParser()
         game_subparsers = game_parser.add_subparsers(dest='command')
 
-        add_participant_parser = game_subparsers.add_parser("add_participant",
-                                                                          help="Add one participant")
+        add_participant_parser = game_subparsers.add_parser("add_participant", help="Add one participant")
         add_participant_parser.add_argument("name", type=str, help="The name of the participant")
         add_participant_parser.set_defaults(function=Game.add_participant)
 
-        add_points_parser = game_subparsers.add_parser("add_points",
-                                                                     help="Add points to the participant")
+        add_points_parser = game_subparsers.add_parser("add_points", help="Add points to the participant")
         add_points_parser.add_argument("name", type=str, help="The name of the participant")
         add_points_parser.add_argument("points", type=int, help="The number of points")
         add_points_parser.set_defaults(function=Game.add_points)
 
-        show_table_parser = game_subparsers.add_parser("show_table",
-                                                                     help="Show game table")
+        show_table_parser = game_subparsers.add_parser("show_table", help="Show game table")
         show_table_parser.set_defaults(function=Game.show_table)
 
-        get_question_parser = game_subparsers.add_parser("get_question",
-                                                       help="Get one question from the base")
+        get_question_parser = game_subparsers.add_parser("get_question", help="Get one question from the base")
+        get_question_parser.add_argument("--complexity", type=int, help="The complexity of the question")
+        get_question_parser.add_argument("--name", type=str, help="The name of the question")
+        get_question_parser.add_argument("--author", type=str, help="The author of the question")
         get_question_parser.set_defaults(function=Game.get_question)
 
-        get_answer_parser = game_subparsers.add_parser("get_answer",
-                                                       help="Get the answer to the previous question")
+        get_package_parser = game_subparsers.add_parser("get_package", help="Get one package from the base")
+        get_package_parser.add_argument("--complexity", type=int, help="The complexity of the package")
+        get_package_parser.add_argument("--name", type=str, help="The name of the package")
+        get_package_parser.add_argument("--author", type=str, help="The author of the package")
+        get_package_parser.set_defaults(function=Game.get_package)
+
+        lost_package_parser = game_subparsers.add_parser("lost_package", help="Reset package game mode")
+        lost_package_parser.set_defaults(function=Game.lost_package)
+
+        get_answer_parser = game_subparsers.add_parser("get_answer", help="Get the answer to the previous question")
         get_answer_parser.set_defaults(function=Game.get_answer)
 
-        end_game_parser = game_subparsers.add_parser("end",
-                                                       help="Exit game mode")
+        end_game_parser = game_subparsers.add_parser("end", help="Exit game mode")
         end_game_parser.set_defaults(function=self._end_game)
 
-        load_previous_parser = game_subparsers.add_parser("load_previous",
-                                                     help="Load previous game instead of this one (note: without saving)")
+        load_previous_parser = game_subparsers.add_parser("load_previous", help="Load last previous game (if the date and name are not specified) instead of this one (note: without saving)")
+        load_previous_parser.add_argument("--date", type=str, help="The date of the previous game (last with that date); format: yy/mm/dd")
+        load_previous_parser.add_argument("--name", type=str, help="The name of the previous game")
         load_previous_parser.set_defaults(function=Game.load_previous)
         return game_parser
 
@@ -265,12 +288,10 @@ class Client:
         save_package_parser = package_subparsers.add_parser("save", help="Save the package")
         save_package_parser.set_defaults(function=self._save_package)
 
-        add_question_parser = package_subparsers.add_parser("add_question",
-                                                            help="Add question to the package")
+        add_question_parser = package_subparsers.add_parser("add_question", help="Add question to the package")
         add_question_parser.add_argument("--text", "-t", type=str, help="The text of the question", required=True)
         add_question_parser.add_argument("--answer", "-a", type=str, help="The answer to the question", required=True)
         add_question_parser.add_argument("--name", type=str, help="The name of the question")
-        add_question_parser.add_argument("--date", type=datetime.datetime, help="The date of the question")
         add_question_parser.add_argument("--author", type=str, help="The author of the question")
         add_question_parser.add_argument("--complexity", "-c", type=str, help="The complexity of the question")
         add_question_parser.set_defaults(function=Package.add_question)
@@ -280,11 +301,11 @@ class Client:
     # Специальный парсер для обработки не-команд (ответа y/n к примеру).
     def _init_service_parser(self):
         service_parser = NonExitArgumentParser()
-        service_parser.add_argument("--bool_answer", choices=["y", "n"], default="y")
+        service_parser.add_argument("--bool_answer", choices=["y", "n"])
 
         return service_parser
 
 
 if __name__ == "__main__":
     client = Client()
-    client.run(address="")
+    client.run(address="http://127.0.0.1:6000/")
