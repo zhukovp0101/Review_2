@@ -3,7 +3,7 @@ import requests
 import shlex
 import json
 from collections import defaultdict
-from sys import stderr
+from sys import stderr, stdin
 from game import Game
 from question import Question
 from package import Package
@@ -25,9 +25,7 @@ class NonExitArgumentParser(argparse.ArgumentParser):
 
 class Client:
     def __init__(self):
-        self._game = None
         self._game_mode = False  # Включен ли режим игры;
-        self._package = None
         self._package_mode = False  # Включен ли режим пакета;
         self._active_now = False  # Является ли клиент активным;
         self._command_line = "> "  # Строка ввода команды;
@@ -54,21 +52,27 @@ class Client:
         return True
 
     # Активирует клиент.
-    def run(self, address=""):
+    def run(self, address="", input_file=""):
         self._active_now = True
         self._connect(address)
         if self._active_now:
             self._print_greeting()
-            while self._active_now:
-                self._get_user_command()
+            if input_file:
+                with open(input_file) as self._input_stream:
+                    while self._active_now:
+                        self._get_user_command()
+            else:
+                self._input_stream = stdin
+                while self._active_now:
+                    self._get_user_command()
 
     # Выход из текущих режимов и деактивация клиента.
     def _exit(self):
         if self._game_mode:
-            result = self._end_game(self._game, dict_args=None, address=self._address)
+            result = self._end_game(dict_args=None, address=self._address)
             self._print_response(result)
         if self._package_mode:
-            result = self._save_package(self._package, dict_args=None, address=self._address)
+            result = self._save_package(dict_args=None, address=self._address)
             self._print_response(result)
         self._print_farewell()
         self._active_now = False
@@ -97,7 +101,7 @@ class Client:
     # Получение команды от пользователя.
     def _get_user_command(self):
         print(self._command_line, end="")
-        command_args = shlex.split(input())
+        command_args = shlex.split(self._input_stream.readline().rstrip())
         if (len(command_args) > 0):
             self._connect(self._address)
             self._handle_command(command_args)
@@ -112,10 +116,7 @@ class Client:
             else:
                 args = self._current_parser.parse_args(command_args)
                 function = vars(args).pop("function")
-                if self._current_parser.object != None:
-                    dict_response = function(self._current_parser.object, vars(args), self._address)
-                else:
-                    dict_response = function(vars(args), self._address)
+                dict_response = function(vars(args), self._address)
                 self._print_response(dict_response)
         except ParserException:
             pass
@@ -135,17 +136,15 @@ class Client:
     # Добавление пакета к базе (через несколько вопросов).
     def _add_package(self, dict_args=None, address=None):
         self._package_mode = True
-        self._package = Package()
-        response = self._package.activate(dict_args, address)
+        response = Package.activate(dict_args, address)
         if response["status"] == "OK":
-            self._set_current_parser(self._parsers["package_parser"], self._package)
+            self._set_current_parser(self._parsers["package_parser"])
         return response
 
-    def _save_package(self, package, dict_args=None, address=None):
+    def _save_package(self, dict_args=None, address=None):
         self._package_mode = False
-        self._package = None
-        self._set_current_parser(self._parsers["default_parser"], self_object=None)
-        response = package.save(dict_args, address)
+        self._set_current_parser(self._parsers["default_parser"])
+        response = Package.save(dict_args, address)
         return response
 
     # Добавление вопросов и ответов из файла в формате JSON.
@@ -153,30 +152,38 @@ class Client:
         filename = dict_args["file"]
         with open(filename) as file:
             dict_data = defaultdict(list, json.load(file))
-            package = Package()
             for package in dict_data["packages"]:
+                response = Package.activate(package, address)
+                self._print_response(response)
+                if response["status"] == "OK":
+                    for question in package["questions"]:
+                        response = Package.add_question(question, address)
+                        print("--", end="")
+                        self._print_response(response)
+                    Package.save(None, address)
 
-
+            for question in dict_data["questions"]:
+                response = Question.add_question(question, address)
+                self._print_response(response)
+            return {"text": "Data loaded.", "status": "OK"}
 
     # Создание игры.
     def _create_game(self, dict_args=None, address=None):
         self._game_mode = True
-        self._game = Game()
-        response = self._game.activate(dict_args, address)
+        response = Game.activate(dict_args, address)
         if response["status"] == "OK":
-            self._set_current_parser(self._parsers["game_parser"], self._game)
+            self._set_current_parser(self._parsers["game_parser"])
         return response
 
     # Окончание игры (с возможным сохранением) и переход в обычный режим.
     def _end_game(self, game, dict_args=None, address=None):
         self._game_mode = False
-        self._game = None
-        self._set_current_parser(self._parsers["default_parser"], self_object=None)
+        self._set_current_parser(self._parsers["default_parser"])
         args = {}
         while True:
             try:
                 print("Save the game?")
-                answer = input()
+                answer = self._input_stream.readline().rstrip()
                 args = self._parsers["service_parser"].parse_args(["--bool_answer", answer])
                 break
             except ParserException:
@@ -188,9 +195,8 @@ class Client:
             return {"text": "Game wasn't saved.", "status": "OK"}
 
     # Установка парсера (нужно для специальных режимов).
-    def _set_current_parser(self, parser, self_object=None):
+    def _set_current_parser(self, parser):
         self._current_parser = parser
-        self._current_parser.object = self_object
         if parser == self._parsers["default_parser"]:
             self._command_line = "> "
         else:
