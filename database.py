@@ -1,12 +1,12 @@
 from peewee import *
 from collections import OrderedDict
 
+
 _database = PostgresqlDatabase(None)
 
+
 def init_database(dict_args):
-    _database.init(database=dict_args["database"], user=dict_args["user"],
-                                         password=dict_args["password"],
-                                         host=dict_args['host'])
+    _database.init(database=dict_args["database"], user=dict_args["user"], password=dict_args["password"], host=dict_args['host'])
     _database.drop_tables([DataBaseQuestion, DataBasePackage, DataBaseGame])
     _database.create_tables([DataBaseQuestion, DataBasePackage, DataBaseGame])
     return _database

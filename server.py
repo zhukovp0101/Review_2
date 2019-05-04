@@ -32,13 +32,11 @@ class Server:
         def _activate_package():
             args = flask.request.json
 
-            # if self._current_package:
-            #     return json.dumps({"result_info": {
-            #         "text": "Package mode isn't activated; package: {}".format(args["name"]), "status": "BAD", "reason": "Package mode is already activated with another package; package: {}".format(self._current_package.name)}}), 200
             try:
                 if DataBasePackage.select().where(DataBasePackage.name == args["name"]).exists():
                     return json.dumps({"result_info": {"text": "Package mode isn't activated.", "status": "BAD", "reason": "Package with that name is already in the database."}}), 200
                 self._current_package = DataBasePackage(**args)
+                self._current_package.save()
                 return json.dumps({"result_info": {"text": "Package mode is activated; package: {}".format(args["name"]), "status": "OK"}}), 200
             except IntegrityError as err:
                 return json.dumps({"result_info": {"text": "Package mode isn't activated.; package: {}".format(args["name"]), "reason": err.args[0],
@@ -50,8 +48,6 @@ class Server:
             try:
                 question = DataBaseQuestion(**args, package=self._current_package)
                 question.save()
-                for q in self._current_package.questions:
-                    print(q)
                 return json.dumps({"result_info": {"text": "The question was added.", "status": "OK"}}), 200
             except IntegrityError as err:
                 return json.dumps({"result_info": {"text": "The question wasn't added.", "reason": err.args[0],
@@ -59,10 +55,8 @@ class Server:
 
         @self._app.route('/package/save', methods=['POST'])
         def _save_package():
-            for q in self._current_package.questions:
-                print(q)
             self._current_package.save()
-            # self._current_package = None
+            self._current_package = None
             return json.dumps({"result_info": {"text": "Package was saved.", "status": "OK"}}), 200
 
         @self._app.route('/game/lost_package', methods=['POST'])
@@ -73,8 +67,8 @@ class Server:
         @self._app.route("/game/get_question", methods=["POST"])
         def _get_question():
             args = flask.request.json
-            subq = DataBaseQuestion.select()
-            if self._current_package != None:
+            subq = DataBaseQuestion.select().where(DataBaseQuestion.id.not_in(self._used_questions))
+            if self._current_package is not None:
                 subq = subq.select().where(DataBaseQuestion.package == self._current_package)
             if args["complexity"]:
                 subq = subq.where(DataBaseQuestion.complexity == args["complexity"])
@@ -82,7 +76,6 @@ class Server:
                 subq = subq.where(DataBaseQuestion.author == args["author"])
             if args["name"]:
                 subq = subq.where(DataBaseQuestion.name == args["name"])
-            subq = subq.where(DataBaseQuestion.id.not_in(self._used_questions))
             try:
                 question = DataBaseQuestion.raw("SELECT * from ({0}) AS subq offset floor(random() * (SELECT COUNT(*) FROM ({0}) AS subq)) limit 1 ;".format(subq.sql()[0]), *subq.sql()[1], *subq.sql()[1]).get()
                 self._used_questions.add(question.id)
@@ -99,7 +92,7 @@ class Server:
         @self._app.route("/game/get_package", methods=["POST"])
         def _get_package():
             args = flask.request.json
-            subq = DataBasePackage.select()
+            subq = DataBasePackage.select().where(DataBasePackage.id.not_in(self._used_packages))
             if args["complexity"]:
                 subq = subq.where(DataBasePackage.complexity == args["complexity"])
             if args["author"]:
@@ -109,9 +102,8 @@ class Server:
             try:
                 package = DataBasePackage.raw("SELECT * from ({0}) AS subq offset floor(random() * (SELECT COUNT(*) FROM ({0}) AS subq)) limit 1 ;".format(
                         subq.sql()[0]), *subq.sql()[1], *subq.sql()[1]).get()
-                for q in package.questions:
-                    print(q)
                 self._current_package = package
+                self._used_packages.add(package.id)
                 return json.dumps(
                     {"result_info": {"text": "The package was found.", "status": "OK"}, "author": package.author,
                      "complexity": package.complexity, "name": package.name}), 200
@@ -199,6 +191,8 @@ class Server:
                 return json.dumps({"result_info": {"text": "The game isn't running.", "status": "BAD",
                                                    "reason": "Game with that name is already in the database."}}), 200
             self._current_game = DataBaseGame(**args)
+            self._current_package = None
+            self._used_packages = set()
             self._used_questions = set()
             return json.dumps({"result_info": {"text": "The game is running.", "status": "OK"}}), 200
 

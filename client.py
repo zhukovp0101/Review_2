@@ -3,7 +3,7 @@ import requests
 import shlex
 import json
 from collections import defaultdict
-from sys import stderr, stdin
+from sys import stderr, stdin, stdout
 from game import Game
 from question import Question
 from package import Package
@@ -101,8 +101,13 @@ class Client:
     # Получение команды от пользователя.
     def _get_user_command(self):
         print(self._command_line, end="")
-        command_args = shlex.split(self._input_stream.readline().rstrip())
-        if (len(command_args) > 0):
+        stdout.flush()
+        line = self._input_stream.readline().rstrip()
+        command_args = shlex.split(line)
+        if self._input_stream != stdin:
+            print(line)
+            stdout.flush()
+        if len(command_args) > 0:
             self._connect(self._address)
             self._handle_command(command_args)
 
@@ -125,7 +130,7 @@ class Client:
     @staticmethod
     def _print_response(dict_response):
         try:
-            if (dict_response["status"] == "OK"):
+            if dict_response["status"] == "OK":
                 print(dict_response["text"])
             else:
                 print(dict_response["text"])
@@ -176,7 +181,7 @@ class Client:
         return response
 
     # Окончание игры (с возможным сохранением) и переход в обычный режим.
-    def _end_game(self, game, dict_args=None, address=None):
+    def _end_game(self, dict_args=None, address=None):
         self._game_mode = False
         self._set_current_parser(self._parsers["default_parser"])
         args = {}
@@ -189,7 +194,7 @@ class Client:
             except ParserException:
                 continue
         if args.bool_answer == "y":
-            response = Game.save(game, dict_args, address)
+            response = Game.save(dict_args, address)
             return response
         else:
             return {"text": "Game wasn't saved.", "status": "OK"}
@@ -300,6 +305,7 @@ class Client:
         add_question_parser.add_argument("--name", type=str, help="The name of the question")
         add_question_parser.add_argument("--author", type=str, help="The author of the question")
         add_question_parser.add_argument("--complexity", "-c", type=str, help="The complexity of the question")
+        add_question_parser.add_argument("--comment", type=str, help="Comment to the question")
         add_question_parser.set_defaults(function=Package.add_question)
 
         return package_parser
@@ -313,5 +319,9 @@ class Client:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--address', type=str, default="http://127.0.0.1:6000/")
+    parser.add_argument('--program', type=str, default="", help="Command file instead of manual input")
+    args = parser.parse_args()
     client = Client()
-    client.run(address="http://127.0.0.1:6000/")
+    client.run(address=args.address, input_file=args.program)
