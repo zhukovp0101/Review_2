@@ -233,14 +233,14 @@ class Client:
         add_question_parser.add_argument("--answer", "-a", type=str, help="The answer to the question", required=True)
         add_question_parser.add_argument("--name", type=str, help="The name of the question")
         add_question_parser.add_argument("--author", type=str, help="The author of the question")
-        add_question_parser.add_argument("--complexity", "-c", type=str, help="The complexity of the question")
+        add_question_parser.add_argument("--complexity", "-c", type=int, help="The complexity of the question")
         add_question_parser.add_argument("--comment", type=str, help="Comment to the question")
         add_question_parser.set_defaults(function=Question.add_question)
 
         add_package_parser = default_subparsers.add_parser("add_package", help="Add package to database")
         add_package_parser.add_argument("name", type=str, help="The name of the package")
         add_package_parser.add_argument("--author", type=str, help="The author of the package")
-        add_package_parser.add_argument("--complexity", type=str, help="The complexity of the package")
+        add_package_parser.add_argument("--complexity", type=int, help="The complexity of the package")
         add_package_parser.set_defaults(function=self._add_package)
 
         create_game_parser = default_subparsers.add_parser("create_game", help="Create a new game")
@@ -304,7 +304,7 @@ class Client:
         add_question_parser.add_argument("--answer", "-a", type=str, help="The answer to the question", required=True)
         add_question_parser.add_argument("--name", type=str, help="The name of the question")
         add_question_parser.add_argument("--author", type=str, help="The author of the question")
-        add_question_parser.add_argument("--complexity", "-c", type=str, help="The complexity of the question")
+        add_question_parser.add_argument("--complexity", "-c", type=int, help="The complexity of the question")
         add_question_parser.add_argument("--comment", type=str, help="Comment to the question")
         add_question_parser.set_defaults(function=Package.add_question)
 
