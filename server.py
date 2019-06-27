@@ -210,7 +210,7 @@ class Server: # TODO: обрабатывать ошибки, связанные 
 
             subq = DataBaseGame.select()
             if args["name"] is None and args["date"] is None:
-                subq = subq.where(DataBaseGame.previous is True)
+                subq = subq.where(DataBaseGame.previous == True)
             if args["name"] is not None:
                 subq = subq.where(DataBaseGame.name == args["name"])
             if args["date"] is not None:
@@ -218,7 +218,7 @@ class Server: # TODO: обрабатывать ошибки, связанные 
                     date = datetime.strptime(args["date"], "%Y/%m/%d")
                 except ValueError:
                     return json.dumps({"result_info": {"text": "Previous game wasn't loaded.", "status": "BAD",
-                                                       "reason": "Incorrect date format."}})
+                                                       "reason": "Incorrect date format, format is %Y/%m/%d."}})
                 subq = subq.where(DataBaseGame.date == date).order_by(DataBaseGame.time.desc())
             try:
                 previous_game = subq.get()

@@ -7,6 +7,7 @@ _database = PostgresqlDatabase(None)
 
 def init_database(dict_args):
     _database.init(**dict_args)
+    _database.drop_tables([DataBaseQuestion, DataBasePackage, DataBaseGame])
     _database.create_tables([DataBaseQuestion, DataBasePackage, DataBaseGame])
     return _database
 
@@ -30,6 +31,7 @@ class DataBaseQuestion(BaseModel):
     author = CharField(null=True)
     complexity = SmallIntegerField(null=True, default=None)
     package = ForeignKeyField(DataBasePackage, backref="questions", null=True)
+
 
 class DataBaseGame(BaseModel):
     name = CharField(null=True, unique=True)
