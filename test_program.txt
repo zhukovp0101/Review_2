@@ -1,0 +1,31 @@
+--help
+load_data test_questions_data.json
+create_game
+add_participant "Becky Thatcher"
+add_participant Tom
+add_participant "Huckleberry Finn"
+get_question --name Anti-humor
+get_answer
+get_package
+get_question
+get_answer
+add_points Tom 50
+add_points "Becky Thatcher" 100
+end
+y
+create_game
+load_previous
+show_table
+add_points Tom 50
+end
+n
+create_game
+load_previous
+show_table
+end
+n
+add_question -t SuperQuestion -a SuperAnswer --name Super --comment SuperComment
+create_game
+get_question --name Super
+exit
+y
